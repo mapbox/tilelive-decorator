@@ -27,7 +27,12 @@ function Decorator(uri, callback) {
     uri.query = uri.query || {};
 
     this.key = uri.key || uri.query.key;
-    this.client = redis.createClient(uri.redis || uri.query.redis);
+
+    this.client = redis.createClient(uri.redis || uri.query.redis, { connect_timeout: 5000 });
+    this.client.on('error', function(err) {
+        callback(err);
+    });
+
     this.cache = LRU({ max: 10000 });
 
     // Source is loaded and provided explicitly.
