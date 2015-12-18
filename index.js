@@ -28,7 +28,7 @@ function Decorator(uri, callback) {
 
     this.key = uri.key || uri.query.key;
 
-    this.client = redis.createClient(uri.redis || uri.query.redis, { connect_timeout: 5000 });
+    this.client = redis.createClient(uri.redis || uri.query.redis, { connect_timeout: 20000 });
     this.client.on('error', function(err) {
         callback(err);
     });

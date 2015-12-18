@@ -20,7 +20,7 @@ TestSource.prototype.getTile = function(z, x, y, callback) {
         if (err) return callback(err);
         callback(null, zdata, {});
     });
-}
+};
 
 tape('setup', function(assert) {
     client.set('4', JSON.stringify({foo: 3, bar: 'baz'}), redis.print);
