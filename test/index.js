@@ -160,6 +160,7 @@ tape('fail on bad redis data', function(assert) {
 var cache = new LRU({max: 1000});
 
 tape('lru setup', function(assert) {
+    client = redis.createClient();
     client.mset(
         '1', JSON.stringify({foo: 1}),
         '2', JSON.stringify({foo: 2}),
