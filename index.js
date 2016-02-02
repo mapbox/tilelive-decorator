@@ -1,3 +1,5 @@
+'use strict';
+
 var util = require('util');
 var EventEmitter = require('events').EventEmitter;
 var redis = require('redis');
@@ -28,14 +30,14 @@ function Decorator(uri, callback) {
 
     this.key = uri.key || uri.query.key;
     this.client = redis.createClient(uri.redis || uri.query.redis);
-    this.cache = LRU({ max: 10000 });
+    this.cache = new LRU({max: 10000});
 
     // Source is loaded and provided explicitly.
     if (uri.source) {
         this._fromSource = uri.source;
         callback(null, this);
     } else {
-        uri.protocol = uri.protocol.replace(/^decorator\+/,'');
+        uri.protocol = uri.protocol.replace(/^decorator\+/, '');
         tilelive.auto(uri);
         tilelive.load(uri, function(err, fromSource) {
             if (err) return callback(err);
@@ -69,8 +71,13 @@ Decorator.prototype.getTile = function(z, x, y, callback) {
             var keysToGet = getDecoratorKeys(layer, source.key);
 
             loadAttributes(keysToGet, client, cache, function(err, replies) {
-                try { decorateLayer(layer, replies, source.key); }
-                catch (err) { return callback(err); }
+                if (err) throw err;
+
+                try {
+                    decorateLayer(layer, replies, source.key);
+                } catch (err) {
+                    return callback(err);
+                }
 
                 var pbf = new Protobuf();
                 VectorTile.write(tile, pbf);
@@ -118,7 +125,7 @@ Decorator.prototype.close = function(callback) {
     callback();
 };
 
-function decorateLayer(layer, replies, key) {
+function decorateLayer(layer, replies) {
     var keyLookup = {};
     var keyIndex = 0;
     for (var k in layer.keys) {
@@ -128,7 +135,7 @@ function decorateLayer(layer, replies, key) {
 
     var valLookup = {};
     var valIndex = 0;
-    for (var k in layer.values) {
+    for (k in layer.values) {
         valLookup[typedKey(layer.values[k])] = valIndex;
         valIndex++;
     }
@@ -142,7 +149,7 @@ function decorateLayer(layer, replies, key) {
                 throw new Error('Invalid attribute data: ' + attrs);
             }
 
-            for (var k in attrs) {
+            for (k in attrs) {
                 var keyTag = keyLookup[k];
                 if (keyTag === undefined) {
                     keyTag = keyIndex;
@@ -190,11 +197,11 @@ function typedKey(value) {
 }
 
 function typed(value) {
-    if (typeof value === 'string') return { string_value: value };
-    if (typeof value === 'boolean') return { bool_value: value };
-    if (typeof value === 'number') return { float_value: value };
-    if (typeof value === 'object') return { string_value: JSON.stringify(value) };
-    return { string_value: value.toString() };
+    if (typeof value === 'string') return {string_value: value};
+    if (typeof value === 'boolean') return {bool_value: value};
+    if (typeof value === 'number') return {float_value: value};
+    if (typeof value === 'object') return {string_value: JSON.stringify(value)};
+    return {string_value: value.toString()};
 }
 
 Decorator.registerProtocols = function(tilelive) {
