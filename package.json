@@ -26,7 +26,7 @@
     "hiredis": "^0.4.1",
     "lru-cache": "^4.0.0",
     "redis": "^2.0.1",
-    "tile-decorator": "^1.0.0",
+    "tile-decorator": "git://github.com/mapbox/tile-decorator.git#linemerge",
     "tilelive": "5.12.x"
   },
   "eslintConfig": {
