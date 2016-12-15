@@ -76,7 +76,7 @@ Decorator.prototype.getTile = function(z, x, y, callback) {
                 }
                 TileDecorator.decorateLayer(layer, source.keepKeys, replies, source.requiredKeys);
                 TileDecorator.mergeLayer(layer);
-                zlib.gzip(TileDecorator.write(tile), callback);
+                zlib.gzip(new Buffer(TileDecorator.write(tile)), callback);
             });
         });
     });
