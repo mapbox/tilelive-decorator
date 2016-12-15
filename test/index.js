@@ -60,7 +60,7 @@ tape('setup source directly', function(assert) {
             assert.ifError(err);
             source.getTile(14, 4831, 6159, function(err, tile) {
                 assert.ifError(err);
-                assert.equal(tile.length, 498, 'buffer size check');
+                assert.equal(tile.length, 489, 'buffer size check');
                 zlib.gunzip(tile, function(err, buffer) {
                     assert.ifError(err);
                     var tile = new VectorTile(new Protobuf(buffer));
