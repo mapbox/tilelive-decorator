@@ -27,6 +27,8 @@ function Decorator(uri, callback) {
 
     this.key = uri.key || uri.query.key;
     this.keepKeys = (uri.keepKeys || uri.query.keepKeys).split(',');
+    this.requiredKeys = uri.requiredKeys || uri.query.requiredKeys;
+    if (this.requiredKeys) this.requiredKeys = this.requiredKeys.split(',');
     this.client = redis.createClient(uri.redis || uri.query.redis);
     this.cache = new LRU({max: 10000});
 
@@ -72,9 +74,9 @@ Decorator.prototype.getTile = function(z, x, y, callback) {
                     if (typeof replies[i] !== 'object')
                         return callback(new Error('Invalid attribute data: ' + replies[i]));
                 }
-                TileDecorator.decorateLayer(layer, source.keepKeys, replies);
+                TileDecorator.decorateLayer(layer, source.keepKeys, replies, source.requiredKeys);
                 TileDecorator.mergeLayer(layer);
-                zlib.gzip(TileDecorator.write(tile), callback);
+                zlib.gzip(new Buffer(TileDecorator.write(tile)), callback);
             });
         });
     });
