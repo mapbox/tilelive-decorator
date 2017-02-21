@@ -179,7 +179,7 @@ tape('lru setup', function(assert) {
 });
 
 tape('loadAttributes (cache miss)', function(assert) {
-    TileliveDecorator.loadAttributes(['1', '2'], client, cache, function(err, replies, loaded) {
+    TileliveDecorator.loadAttributes(false, ['1', '2'], client, cache, function(err, replies, loaded) {
         assert.ifError(err);
         assert.deepEqual(replies, ['{"foo":1}', '{"foo":2}'], 'loads');
         assert.equal(cache.get('1'), '{"foo":1}', 'sets item 1 in cache');
@@ -190,7 +190,7 @@ tape('loadAttributes (cache miss)', function(assert) {
 });
 
 tape('loadAttributes (cache hit)', function(assert) {
-    TileliveDecorator.loadAttributes(['1', '2'], client, cache, function(err, replies, loaded) {
+    TileliveDecorator.loadAttributes(false, ['1', '2'], client, cache, function(err, replies, loaded) {
         assert.ifError(err);
         assert.deepEqual(replies, ['{"foo":1}', '{"foo":2}'], 'loads');
         assert.equal(loaded, 0, '0 items loaded from redis');
@@ -199,7 +199,7 @@ tape('loadAttributes (cache hit)', function(assert) {
 });
 
 tape('loadAttributes (cache mixed)', function(assert) {
-    TileliveDecorator.loadAttributes(['1', '3', '2', '4'], client, cache, function(err, replies, loaded) {
+    TileliveDecorator.loadAttributes(false, ['1', '3', '2', '4'], client, cache, function(err, replies, loaded) {
         assert.ifError(err);
         assert.deepEqual(replies, ['{"foo":1}', '{"foo":3}', '{"foo":2}', '{"foo":4}'], 'loads');
         assert.equal(cache.get('1'), '{"foo":1}', 'sets item 1 in cache');
@@ -212,6 +212,38 @@ tape('loadAttributes (cache mixed)', function(assert) {
 });
 
 tape('lru teardown', function(assert) {
-    client.unref();
-    assert.end();
+    cache.reset();
+    client.del('1', '2', '3', '4', function() {
+        client.unref();
+        assert.end();
+    });
 });
+
+
+tape('lru setup', function(assert) {
+    client = redis.createClient();
+    var multi = client.multi();
+    multi.hset('1', 'foo', 1);
+    multi.hset('2', 'foo', 2);
+    multi.hset('3', 'foo', 3);
+    multi.hset('4', 'foo', 4);
+    multi.exec(assert.end);
+});
+
+tape('loadAttributes (using hashes)', function(assert) {
+    TileliveDecorator.loadAttributes(true, ['1', '2'], client, cache, function(err, replies, loaded) {
+        assert.ifError(err);
+        assert.deepEqual(replies, [{foo: '1'}, {foo: '2'}], 'loads');
+        assert.equal(loaded, 2, '2 items loaded from redis');
+        assert.end();
+    });
+});
+
+tape('lru teardown', function(assert) {
+    cache.reset();
+    client.del('1', '2', '3', '4', function() {
+        client.unref();
+        assert.end();
+    });
+});
+

@@ -70,7 +70,7 @@ Decorator.prototype.getTile = function(z, x, y, callback) {
 
             var keysToGet = TileDecorator.getLayerValues(layer, source.key);
 
-            loadAttributes(keysToGet, client, cache, function(err, replies) {
+            loadAttributes(useHashes, keysToGet, client, cache, function(err, replies) {
                 if (err) callback(err);
                 if (!useHashes) replies = replies.map(JSON.parse);
 
@@ -92,7 +92,6 @@ function loadAttributes(useHashes, keys, client, cache, callback) {
     var replies = [];
     var loadKeys = [];
     var loadPos = [];
-    var queryCt = 0;
     var multi = client.multi();
 
     for (var i = 0; i < keys.length; i++) {
@@ -101,16 +100,15 @@ function loadAttributes(useHashes, keys, client, cache, callback) {
         if (cached) {
             replies[i] = cached;
         } else {
-            queryCt++;
             if (useHashes) multi.hgetall(keys[i]);
-            else multi.get(keys[i])
-            // loadKeys.push(keys[i]);
+            else multi.get(keys[i]);
+            loadKeys.push(keys[i]);
             loadPos.push(i);
         }
     }
 
     // Nothing left to hit redis for.
-    if (queryCt === 0) return callback(null, replies, 0);
+    if (!loadKeys.length) return callback(null, replies, 0);
 
     multi.exec(function(err, loaded) {
         if (err) return callback(err);
