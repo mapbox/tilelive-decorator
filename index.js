@@ -30,6 +30,7 @@ function Decorator(uri, callback) {
     this.requiredKeys = uri.requiredKeys || uri.query.requiredKeys;
     if (this.requiredKeys) this.requiredKeys = this.requiredKeys.split(',');
     this.client = redis.createClient(uri.redis || uri.query.redis);
+    this.hashes = (uri.hashes || uri.query.hashes) === 'true';
     this.cache = new LRU({max: 10000});
 
     // Source is loaded and provided explicitly.
@@ -56,6 +57,8 @@ Decorator.prototype.getTile = function(z, x, y, callback) {
     var source = this;
     var client = this.client;
     var cache = this.cache;
+    var useHashes = this.hashes;
+
     this._fromSource.getTile(z, x, y, function(err, buffer) {
         if (err) return callback(err);
         zlib.gunzip(buffer, function(err, buffer) {
@@ -67,12 +70,14 @@ Decorator.prototype.getTile = function(z, x, y, callback) {
 
             var keysToGet = TileDecorator.getLayerValues(layer, source.key);
 
-            loadAttributes(keysToGet, client, cache, function(err, replies) {
+            loadAttributes(useHashes, keysToGet, client, cache, function(err, replies) {
                 if (err) callback(err);
-                replies = replies.map(JSON.parse);
+                if (!useHashes) replies = replies.map(JSON.parse);
+
                 for (var i = 0; i < replies.length; i++) {
-                    if (typeof replies[i] !== 'object')
+                    if (typeof replies[i] !== 'object') {
                         return callback(new Error('Invalid attribute data: ' + replies[i]));
+                    }
                 }
                 TileDecorator.decorateLayer(layer, source.keepKeys, replies, source.requiredKeys);
                 TileDecorator.mergeLayer(layer);
@@ -82,17 +87,25 @@ Decorator.prototype.getTile = function(z, x, y, callback) {
     });
 };
 
-function loadAttributes(keys, client, cache, callback) {
+function loadAttributes(useHashes, keys, client, cache, callback) {
     // Grab cached values from LRU, leave
     // remaining for retrieval from redis.
     var replies = [];
     var loadKeys = [];
     var loadPos = [];
+    var multi = client.multi();
+
     for (var i = 0; i < keys.length; i++) {
         var cached = cache.get(keys[i]);
+
         if (cached) {
             replies[i] = cached;
         } else {
+            if (useHashes) {
+                multi.hgetall(keys[i]);
+            } else {
+                multi.get(keys[i]);
+            }
             loadKeys.push(keys[i]);
             loadPos.push(i);
         }
@@ -101,7 +114,7 @@ function loadAttributes(keys, client, cache, callback) {
     // Nothing left to hit redis for.
     if (!loadKeys.length) return callback(null, replies, 0);
 
-    client.mget(loadKeys, function(err, loaded) {
+    multi.exec(function(err, loaded) {
         if (err) return callback(err);
 
         // Insert redis-loaded values into the right positions and set in LRU cache.
