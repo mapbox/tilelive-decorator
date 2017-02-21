@@ -132,7 +132,7 @@ function loadAttributes(useHashes, keepKeysRedis, requiredKeysRedis, keys, clien
             }
         }
         // Insert redis-loaded values into the right positions and set in LRU cache.
-        loaded.forEach(function (val, i) {
+        loaded.forEach(function(val, i) {
             // skip other checks if we know val is null
             if (val === null) return setInCache(val, i);
             if (keepKeysRedis && useHashes) {
@@ -140,7 +140,7 @@ function loadAttributes(useHashes, keepKeysRedis, requiredKeysRedis, keys, clien
                 // instead of HGETALL, which means the response is an array that
                 // we need to fix into an object
                 var newval = {};
-                for (var k = 0; k < keepKeysRedis.length; k++) {
+                for (var k = 0; k < keepKeysRedis.length; k++) { // eslint-disable-line no-redeclare
                     newval[keepKeysRedis[k]] = val[k];
                 }
                 val = newval;
@@ -148,7 +148,7 @@ function loadAttributes(useHashes, keepKeysRedis, requiredKeysRedis, keys, clien
 
 
             if (requiredKeysRedis) {
-                for (var k = 0; k < requiredKeysRedis.length; k++) {
+                for (var k = 0; k < requiredKeysRedis.length; k++) { // eslint-disable-line no-redeclare
                     var required = requiredKeysRedis[k];
                     // If it doesn't have a required key, bail out
                     if (!val.hasOwnProperty(required) || val[required] === null) {
@@ -158,8 +158,8 @@ function loadAttributes(useHashes, keepKeysRedis, requiredKeysRedis, keys, clien
             }
             if (keepKeysRedis) {
                 var keep = {};
-                for (var j = 0; j < keepKeysRedis.length; j++) {
-                    var key = keepKeysRedis[j];
+                for (var k = 0; k < keepKeysRedis.length; k++) { // eslint-disable-line no-redeclare
+                    var key = keepKeysRedis[k];
                     if (val.hasOwnProperty(key)) keep[key] = val[key];
                 }
                 val = keep;
