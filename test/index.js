@@ -165,6 +165,109 @@ tape('fail on bad redis data', function(assert) {
     });
 });
 
+
+tape('setup', function(assert) {
+    client.set('QN99', JSON.stringify({foo: 3, bar: 'baz', baz: 'ignored'}), redis.print);
+    client.set('QN60', JSON.stringify({foo: 4, bar: 'baz', baz: 'ignored', qux: 'required'}), redis.print);
+    client.unref();
+    assert.end();
+});
+
+tape('keepKeysRedis', function(assert) {
+    new TestSource(null, function(err, testSource) {
+        assert.ifError(err);
+        var options = {
+            key: 'NTACode',
+            source: testSource,
+            keepKeys: 'BoroCode,NTACode',
+            keepKeysRedis: 'foo,bar,qux' // ignored baz
+        };
+        new TileliveDecorator(options, function(err, source) {
+            assert.ifError(err);
+            source.getTile(14, 4831, 6159, function(err, tile) {
+                assert.ifError(err);
+                zlib.gunzip(tile, function(err, buffer) {
+                    assert.ifError(err);
+                    var tile = new VectorTile(new Protobuf(buffer));
+                    var layer = tile.layers.nycneighborhoods;
+                    var qn99, qn60;
+
+                    for (var i = 0; i < layer.length; i++) {
+                        var ft = layer.feature(i);
+                        if (ft.properties.NTACode === 'QN99') qn99 = ft;
+                        if (ft.properties.NTACode === 'QN60') qn60 = ft;
+                    }
+
+                    assert.deepEqual(qn60.properties, {
+                        BoroCode: 4,
+                        NTACode: 'QN60',
+                        bar: 'baz',
+                        foo: 4,
+                        qux: 'required'
+                    });
+
+                    assert.deepEqual(qn99.properties, {
+                        BoroCode: 4,
+                        NTACode: 'QN99',
+                        bar: 'baz',
+                        foo: 3
+                    });
+
+                    source.client.unref();
+                    assert.end();
+                });
+            });
+        });
+    });
+});
+
+tape('requiredKeysRedis', function(assert) {
+    new TestSource(null, function(err, testSource) {
+        assert.ifError(err);
+        var options = {
+            key: 'NTACode',
+            source: testSource,
+            keepKeys: 'BoroCode,NTACode',
+            keepKeysRedis: 'foo,bar,qux', // ignored baz
+            requiredKeysRedis: 'qux'
+        };
+        new TileliveDecorator(options, function(err, source) {
+            assert.ifError(err);
+            source.getTile(14, 4831, 6159, function(err, tile) {
+                assert.ifError(err);
+                zlib.gunzip(tile, function(err, buffer) {
+                    assert.ifError(err);
+                    var tile = new VectorTile(new Protobuf(buffer));
+                    var layer = tile.layers.nycneighborhoods;
+                    var qn99, qn60;
+
+                    for (var i = 0; i < layer.length; i++) {
+                        var ft = layer.feature(i);
+                        if (ft.properties.NTACode === 'QN99') qn99 = ft;
+                        if (ft.properties.NTACode === 'QN60') qn60 = ft;
+                    }
+
+                    assert.deepEqual(qn60.properties, {
+                        BoroCode: 4,
+                        NTACode: 'QN60',
+                        bar: 'baz',
+                        foo: 4,
+                        qux: 'required'
+                    }, 'QN60 is decorated - it has required key qux');
+
+                    assert.deepEqual(qn99.properties, {
+                        BoroCode: 4,
+                        NTACode: 'QN99'
+                    }, 'QN99 isn\'t decorated - it doesn\'t have required key qux');
+
+                    source.client.unref();
+                    assert.end();
+                });
+            });
+        });
+    });
+});
+
 var cache = new LRU({max: 1000});
 
 tape('lru setup', function(assert) {
