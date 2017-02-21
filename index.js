@@ -27,8 +27,12 @@ function Decorator(uri, callback) {
 
     this.key = uri.key || uri.query.key;
     this.keepKeys = (uri.keepKeys || uri.query.keepKeys).split(',');
+    this.keepKeysRedis = uri.keepKeysRedis || uri.query.keepKeysRedis;
+    if (this.keepKeysRedis) this.keepKeysRedis = this.keepKeysRedis.split(',');
     this.requiredKeys = uri.requiredKeys || uri.query.requiredKeys;
     if (this.requiredKeys) this.requiredKeys = this.requiredKeys.split(',');
+    this.requiredKeysRedis = uri.requiredKeysRedis || uri.query.requiredKeysRedis;
+    if (this.requiredKeysRedis) this.requiredKeysRedis = this.requiredKeysRedis.split(',');
     this.client = redis.createClient(uri.redis || uri.query.redis);
     this.hashes = (uri.hashes || uri.query.hashes) === 'true';
     this.cache = new LRU({max: 10000});
@@ -78,8 +82,33 @@ Decorator.prototype.getTile = function(z, x, y, callback) {
                     if (typeof replies[i] !== 'object') {
                         return callback(new Error('Invalid attribute data: ' + replies[i]));
                     }
+
+                    if (replies[i] === null) continue; // skip checking
+
+                    if (source.requiredKeysRedis) {
+                        for (var k = 0; k < source.requiredKeysRedis.length; k++) {
+                            if (!replies[i].hasOwnProperty(source.requiredKeysRedis[k])) {
+                                replies[i] = null; // empty this reply
+                                break;
+                            }
+                        }
+                    }
                 }
-                TileDecorator.decorateLayer(layer, source.keepKeys, replies, source.requiredKeys);
+
+                if (source.keepKeysRedis) {
+                    replies = replies.map(function(reply) {
+                        if (reply === null) return reply;
+
+                        var keep = {};
+                        for (var k = 0; k < source.keepKeysRedis.length; k++) {
+                            var key = source.keepKeysRedis[k];
+                            if (reply.hasOwnProperty(key)) keep[key] = reply[key];
+                        }
+                        return keep;
+                    });
+                }
+
+                TileDecorator.decorateLayer(layer, source.keepKeys, replies, source.requiredKeys, source.propertyTransform);
                 TileDecorator.mergeLayer(layer);
                 zlib.gzip(new Buffer(TileDecorator.write(tile)), callback);
             });
