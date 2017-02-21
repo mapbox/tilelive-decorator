@@ -75,8 +75,9 @@ Decorator.prototype.getTile = function(z, x, y, callback) {
                 if (!useHashes) replies = replies.map(JSON.parse);
 
                 for (var i = 0; i < replies.length; i++) {
-                    if (typeof replies[i] !== 'object')
+                    if (typeof replies[i] !== 'object') {
                         return callback(new Error('Invalid attribute data: ' + replies[i]));
+                    }
                 }
                 TileDecorator.decorateLayer(layer, source.keepKeys, replies, source.requiredKeys);
                 TileDecorator.mergeLayer(layer);
@@ -100,8 +101,11 @@ function loadAttributes(useHashes, keys, client, cache, callback) {
         if (cached) {
             replies[i] = cached;
         } else {
-            if (useHashes) multi.hgetall(keys[i]);
-            else multi.get(keys[i]);
+            if (useHashes) {
+                multi.hgetall(keys[i]);
+            } else {
+                multi.get(keys[i]);
+            }
             loadKeys.push(keys[i]);
             loadPos.push(i);
         }
