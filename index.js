@@ -23,19 +23,23 @@ module.exports.loadAttributes = loadAttributes;
 function Decorator(uri, callback) {
     if (typeof uri === 'string') uri = url.parse(uri, true);
     if (typeof uri.query === 'string') uri.query = qs.parse(uri.query);
-    uri.query = uri.query || {};
+    var query = uri.query || uri;
 
-    this.key = uri.key || uri.query.key;
-    this.keepKeys = (uri.keepKeys || uri.query.keepKeys).split(',');
-    this.keepKeysRedis = uri.keepKeysRedis || uri.query.keepKeysRedis;
-    if (this.keepKeysRedis) this.keepKeysRedis = this.keepKeysRedis.split(',');
-    this.requiredKeys = uri.requiredKeys || uri.query.requiredKeys;
-    if (this.requiredKeys) this.requiredKeys = this.requiredKeys.split(',');
-    this.requiredKeysRedis = uri.requiredKeysRedis || uri.query.requiredKeysRedis;
-    if (this.requiredKeysRedis) this.requiredKeysRedis = this.requiredKeysRedis.split(',');
-    this.client = redis.createClient(uri.redis || uri.query.redis);
-    this.hashes = (uri.hashes || uri.query.hashes) === 'true';
+    this.key = query.key;
+    this.client = redis.createClient(query.redis);
+    this.hashes = query.hashes === 'true';
     this.cache = new LRU({max: 10000});
+
+    this.keepKeys = query.keepKeys.split(',');
+
+    this.keepKeysRedis = query.keepKeysRedis;
+    if (this.keepKeysRedis) this.keepKeysRedis = this.keepKeysRedis.split(',');
+
+    this.requiredKeys = query.requiredKeys;
+    if (this.requiredKeys) this.requiredKeys = this.requiredKeys.split(',');
+
+    this.requiredKeysRedis = query.requiredKeysRedis;
+    if (this.requiredKeysRedis) this.requiredKeysRedis = this.requiredKeysRedis.split(',');
 
     // Source is loaded and provided explicitly.
     if (uri.source) {
