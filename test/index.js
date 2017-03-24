@@ -282,34 +282,34 @@ tape('lru setup', function(assert) {
 });
 
 tape('loadAttributes (cache miss)', function(assert) {
-    TileliveDecorator.loadAttributes(false, ['1', '2'], client, cache, function(err, replies, loaded) {
+    TileliveDecorator.loadAttributes(false, null, null, ['1', '2'], client, cache, function(err, replies, loaded) {
         assert.ifError(err);
-        assert.deepEqual(replies, ['{"foo":1}', '{"foo":2}'], 'loads');
-        assert.equal(cache.get('1'), '{"foo":1}', 'sets item 1 in cache');
-        assert.equal(cache.get('2'), '{"foo":2}', 'sets item 2 in cache');
+        assert.deepEqual(replies, [{'foo': 1}, {'foo': 2}], 'loads');
+        assert.deepEqual(cache.get('1'), {foo: 1}, 'sets item 1 in cache');
+        assert.deepEqual(cache.get('2'), {foo: 2}, 'sets item 2 in cache');
         assert.equal(loaded, 2, '2 items loaded from redis');
         assert.end();
     });
 });
 
 tape('loadAttributes (cache hit)', function(assert) {
-    TileliveDecorator.loadAttributes(false, ['1', '2'], client, cache, function(err, replies, loaded) {
+    TileliveDecorator.loadAttributes(false, null, null, ['1', '2'], client, cache, function(err, replies, loaded) {
         assert.ifError(err);
-        assert.deepEqual(replies, ['{"foo":1}', '{"foo":2}'], 'loads');
+        assert.deepEqual(replies, [{'foo': 1}, {'foo': 2}], 'loads');
         assert.equal(loaded, 0, '0 items loaded from redis');
         assert.end();
     });
 });
 
 tape('loadAttributes (cache mixed)', function(assert) {
-    TileliveDecorator.loadAttributes(false, ['1', '3', '2', '4'], client, cache, function(err, replies, loaded) {
+    TileliveDecorator.loadAttributes(false, null, null, ['1', '3', '2', '4'], client, cache, function(err, replies, loaded) {
         assert.ifError(err);
-        assert.deepEqual(replies, ['{"foo":1}', '{"foo":3}', '{"foo":2}', '{"foo":4}'], 'loads');
-        assert.equal(cache.get('1'), '{"foo":1}', 'sets item 1 in cache');
-        assert.equal(cache.get('2'), '{"foo":2}', 'sets item 2 in cache');
-        assert.equal(cache.get('3'), '{"foo":3}', 'sets item 3 in cache');
-        assert.equal(cache.get('4'), '{"foo":4}', 'sets item 4 in cache');
-        assert.equal(loaded, 2, '2 items loaded from redis');
+        assert.deepEqual(replies, [{'foo': 1}, {'foo': 3}, {'foo': 2}, {'foo': 4}], 'loads');
+        assert.deepEqual(cache.get('1'), {'foo': 1}, 'sets item 1 in cache');
+        assert.deepEqual(cache.get('2'), {'foo': 2}, 'sets item 2 in cache');
+        assert.deepEqual(cache.get('3'), {'foo': 3}, 'sets item 3 in cache');
+        assert.deepEqual(cache.get('4'), {'foo': 4}, 'sets item 4 in cache');
+        assert.deepEqual(loaded, 2, '2 items loaded from redis');
         assert.end();
     });
 });
@@ -326,18 +326,36 @@ tape('lru teardown', function(assert) {
 tape('lru setup', function(assert) {
     client = redis.createClient();
     var multi = client.multi();
-    multi.hset('1', 'foo', 1);
-    multi.hset('2', 'foo', 2);
-    multi.hset('3', 'foo', 3);
-    multi.hset('4', 'foo', 4);
+    multi.hmset('1', 'foo', 1, 'bar', 1);
+    multi.hmset('2', 'foo', 2, 'bar', 2);
+    multi.hmset('3', 'foo', 3, 'bar', 3, 'baz', 3);
+    multi.hmset('4', 'foo', 4, 'bar', 4, 'baz', 4);
     multi.exec(assert.end);
 });
 
 tape('loadAttributes (using hashes)', function(assert) {
-    TileliveDecorator.loadAttributes(true, ['1', '2'], client, cache, function(err, replies, loaded) {
+    TileliveDecorator.loadAttributes(true, null, null, ['1', '2'], client, cache, function(err, replies, loaded) {
+        assert.ifError(err);
+        assert.deepEqual(replies, [{foo: '1', bar: '1'}, {foo: '2', bar: '2'}], 'loads');
+        assert.equal(loaded, 2, '2 items loaded from redis');
+        assert.end();
+    });
+});
+
+tape('loadAttributes (using hashes, keepKeys)', function(assert) {
+    cache.reset();
+    TileliveDecorator.loadAttributes(true, ['foo'], null, ['1', '2'], client, cache, function(err, replies) {
         assert.ifError(err);
         assert.deepEqual(replies, [{foo: '1'}, {foo: '2'}], 'loads');
-        assert.equal(loaded, 2, '2 items loaded from redis');
+        assert.end();
+    });
+});
+
+tape('loadAttributes (using hashes, requiredKeys)', function(assert) {
+    cache.reset();
+    TileliveDecorator.loadAttributes(true, ['foo', 'baz'], ['baz'], ['1', '2', '3', '4'], client, cache, function(err, replies) {
+        assert.ifError(err);
+        assert.deepEqual(replies, [null, null, {foo: '3', baz: '3'}, {foo: '4', baz: '4'}], 'loads');
         assert.end();
     });
 });

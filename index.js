@@ -74,39 +74,8 @@ Decorator.prototype.getTile = function(z, x, y, callback) {
 
             var keysToGet = TileDecorator.getLayerValues(layer, source.key);
 
-            loadAttributes(useHashes, keysToGet, client, cache, function(err, replies) {
-                if (err) callback(err);
-                if (!useHashes) replies = replies.map(JSON.parse);
-
-                for (var i = 0; i < replies.length; i++) {
-                    if (typeof replies[i] !== 'object') {
-                        return callback(new Error('Invalid attribute data: ' + replies[i]));
-                    }
-
-                    if (replies[i] === null) continue; // skip checking
-
-                    if (source.requiredKeysRedis) {
-                        for (var k = 0; k < source.requiredKeysRedis.length; k++) {
-                            if (!replies[i].hasOwnProperty(source.requiredKeysRedis[k])) {
-                                replies[i] = null; // empty this reply
-                                break;
-                            }
-                        }
-                    }
-                }
-
-                if (source.keepKeysRedis) {
-                    replies = replies.map(function(reply) {
-                        if (reply === null) return reply;
-
-                        var keep = {};
-                        for (var k = 0; k < source.keepKeysRedis.length; k++) {
-                            var key = source.keepKeysRedis[k];
-                            if (reply.hasOwnProperty(key)) keep[key] = reply[key];
-                        }
-                        return keep;
-                    });
-                }
+            loadAttributes(useHashes, source.keepKeysRedis, source.requiredKeysRedis, keysToGet, client, cache, function(err, replies) {
+                if (err) return callback(err);
 
                 TileDecorator.decorateLayer(layer, source.keepKeys, replies, source.requiredKeys, source.propertyTransform);
                 TileDecorator.mergeLayer(layer);
@@ -116,7 +85,7 @@ Decorator.prototype.getTile = function(z, x, y, callback) {
     });
 };
 
-function loadAttributes(useHashes, keys, client, cache, callback) {
+function loadAttributes(useHashes, keepKeysRedis, requiredKeysRedis, keys, client, cache, callback) {
     // Grab cached values from LRU, leave
     // remaining for retrieval from redis.
     var replies = [];
@@ -131,7 +100,11 @@ function loadAttributes(useHashes, keys, client, cache, callback) {
             replies[i] = cached;
         } else {
             if (useHashes) {
-                multi.hgetall(keys[i]);
+                if (keepKeysRedis) {
+                    multi.hmget(keys[i], keepKeysRedis.slice());
+                } else {
+                    multi.hgetall(keys[i]);
+                }
             } else {
                 multi.get(keys[i]);
             }
@@ -146,11 +119,54 @@ function loadAttributes(useHashes, keys, client, cache, callback) {
     multi.exec(function(err, loaded) {
         if (err) return callback(err);
 
-        // Insert redis-loaded values into the right positions and set in LRU cache.
-        for (var i = 0; i < loaded.length; i++) {
-            replies[loadPos[i]] = loaded[i];
-            cache.set(loadKeys[i], loaded[i]);
+        function setInCache(val, i) {
+            replies[loadPos[i]] = val;
+            cache.set(loadKeys[i], val);
         }
+
+        for (var i = 0; i < loaded.length; i++) {
+            if (!useHashes) loaded[i] = JSON.parse(loaded[i]);
+
+            if (typeof loaded[i] !== 'object') {
+                return callback(new Error('Invalid attribute data: ' + loaded[i]));
+            }
+        }
+        // Insert redis-loaded values into the right positions and set in LRU cache.
+        loaded.forEach(function(val, i) {
+            // skip other checks if we know val is null
+            if (val === null) return setInCache(val, i);
+            if (keepKeysRedis && useHashes) {
+                // If we're using hashes and there are keepKeysRedis, we used HMGET
+                // instead of HGETALL, which means the response is an array that
+                // we need to fix into an object
+                var newval = {};
+                for (var k = 0; k < keepKeysRedis.length; k++) { // eslint-disable-line no-redeclare
+                    newval[keepKeysRedis[k]] = val[k];
+                }
+                val = newval;
+            }
+
+
+            if (requiredKeysRedis) {
+                for (var k = 0; k < requiredKeysRedis.length; k++) { // eslint-disable-line no-redeclare
+                    var required = requiredKeysRedis[k];
+                    // If it doesn't have a required key, bail out
+                    if (!val.hasOwnProperty(required) || val[required] === null) {
+                        return setInCache(null, i);
+                    }
+                }
+            }
+            if (keepKeysRedis) {
+                var keep = {};
+                for (var k = 0; k < keepKeysRedis.length; k++) { // eslint-disable-line no-redeclare
+                    var key = keepKeysRedis[k];
+                    if (val.hasOwnProperty(key)) keep[key] = val[key];
+                }
+                val = keep;
+            }
+
+            setInCache(val, i);
+        });
 
         return callback(null, replies, loaded.length);
     });
