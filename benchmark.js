@@ -36,7 +36,7 @@ client.on('end', function () {
   var suite = new Benchmark.Suite('tilelive-decorator');
   suite
     .add('decorator',function (deferred) {
-      new Decorator({source: source, key: '@id', keepKeys: '@id,highway'}, function (err, dec) {
+      new Decorator({source: source, key: '@id', sourceProps: {keep: '@id,highway'}}, function (err, dec) {
         dec.getTile(1, 1, 1, function (err, data) {
           dec.close(function () {
             deferred.resolve();
@@ -45,7 +45,7 @@ client.on('end', function () {
       });
     }, benchOptions)
     .add('decorator#requiredKeysRedis',function (deferred) {
-      new Decorator({source: source, key: '@id', keepKeys: '@id,highway', requiredKeysRedis: 'baz'}, function (err, dec) {
+      new Decorator({source: source, key: '@id', sourceProps: {keep: '@id,highway'}, redis: {requried: 'baz'}}, function (err, dec) {
         dec.getTile(1, 1, 1, function (err, data) {
           dec.close(function () {
             deferred.resolve();
@@ -54,7 +54,7 @@ client.on('end', function () {
       });
     }, benchOptions)
     .add('decorator#requiredKeys',function (deferred) {
-      new Decorator({source: source, key: '@id', keepKeys: '@id,highway', requiredKeys: 'railway'}, function (err, dec) {
+      new Decorator({source: source, key: '@id', sourceProps: {keep: '@id,highway', required: 'railway'}}, function (err, dec) {
         dec.getTile(1, 1, 1, function (err, data) {
           dec.close(function () {
             deferred.resolve();
