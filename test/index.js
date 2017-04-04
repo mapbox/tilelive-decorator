@@ -36,13 +36,13 @@ tape('load with decorator+s3 uri', function(assert) {
     TileliveDecorator.registerProtocols(tilelive);
     TileliveS3.registerProtocols(tilelive);
     tilelive.load('decorator+s3://test/{z}/{x}/{y}' +
-            '?key=BoroCode&keepKeys=BoroCode,BoroName,Shape_Area&requiredKeys=BoroCode' +
+            '?key=BoroCode&sourceProps={"keep":"BoroCode,BoroName,Shape_Area","required":"BoroCode"}' +
             '&redis=redis://localhost:6379', function(err, source) {
         assert.ifError(err);
         assert.equal(source.key, 'BoroCode');
         assert.equal(source.client.address, 'localhost:6379');
         assert.equal(source._fromSource instanceof TileliveS3, true);
-        assert.deepEqual(source.requiredKeys, ['BoroCode']);
+        assert.deepEqual(source.sourceProps.required, ['BoroCode']);
         source.client.unref();
         assert.end();
     });
@@ -54,7 +54,9 @@ tape('setup source directly', function(assert) {
         var options = {
             key: 'BoroCode',
             source: testSource,
-            keepKeys: 'BoroCode,BoroName,Shape_Area'
+            sourceProps: {
+                keep: ['BoroCode', 'BoroName', 'Shape_Area']
+            }
         };
         new TileliveDecorator(options, function(err, source) {
             assert.ifError(err);
@@ -179,8 +181,8 @@ tape('keepKeysRedis', function(assert) {
         var options = {
             key: 'NTACode',
             source: testSource,
-            keepKeys: 'BoroCode,NTACode',
-            keepKeysRedis: 'foo,bar,qux' // ignored baz
+            sourceProps: {keep: ['BoroCode', 'NTACode']},
+            redisProps: {keep: ['foo', 'bar', 'qux']}
         };
         new TileliveDecorator(options, function(err, source) {
             assert.ifError(err);
@@ -227,9 +229,11 @@ tape('requiredKeysRedis', function(assert) {
         var options = {
             key: 'NTACode',
             source: testSource,
-            keepKeys: 'BoroCode,NTACode',
-            keepKeysRedis: 'foo,bar,qux', // ignored baz
-            requiredKeysRedis: 'qux'
+            sourceProps: {keep: ['BoroCode', 'NTACode']},
+            redisProps: {
+                keep: ['foo', 'bar', 'qux'],
+                required: ['qux']
+            }
         };
         new TileliveDecorator(options, function(err, source) {
             assert.ifError(err);

@@ -4,7 +4,7 @@ var util = require('util');
 var EventEmitter = require('events').EventEmitter;
 var redis = require('redis');
 var zlib = require('zlib');
-var TileDecorator = require('tile-decorator');
+var TileDecorator = require('@mapbox/tile-decorator');
 var qs = require('querystring');
 var url = require('url');
 var tilelive = require('tilelive');
@@ -110,7 +110,7 @@ Decorator.prototype.getTile = function(z, x, y, callback) {
 
                         var keep = {};
                         for (var k = 0; k < self.redisProps.keep.length; k++) {
-                            var key = self.redisProps.required[k];
+                            var key = self.redisProps.keep[k];
                             if (reply.hasOwnProperty(key)) keep[key] = reply[key];
                         }
                         return keep;
