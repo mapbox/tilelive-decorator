@@ -79,7 +79,7 @@ Decorator.prototype.getTile = function(z, x, y, callback) {
             var tile = TileDecorator.read(buffer);
             var layer = tile.layers[0];
             if (!layer) return callback(new Error('No layers found'));
-            if (self.sourceProps.required) TileDecorator.filterByKeys(layer, self.sourceProps.required);
+            if (self.sourceProps.required) TileDecorator.filterLayerByKeys(layer, self.sourceProps.required);
 
             var keysToGet = TileDecorator.getLayerValues(layer, self.key);
 
@@ -117,10 +117,10 @@ Decorator.prototype.getTile = function(z, x, y, callback) {
                     });
                 }
 
-                if (self.sourceProps.keep) TileDecorator.selectKeys(layer, self.sourceProps.keep);
-                TileDecorator.decorateLayer(layer, replies);
-                if (self.outputProps.required) TileDecorator.filterByKeys(layer, self.outputProps.required);
-                if (self.outputProps.keep) TileDecorator.selectKeys(layer, self.outputProps.keep);
+                if (self.sourceProps.keep) TileDecorator.selectLayerKeys(layer, self.sourceProps.keep);
+                TileDecorator.updateLayerProperties(layer, replies);
+                if (self.outputProps.required) TileDecorator.filterLayerByKeys(layer, self.outputProps.required);
+                if (self.outputProps.keep) TileDecorator.selectLayerKeys(layer, self.outputProps.keep);
 
                 TileDecorator.mergeLayer(layer);
                 zlib.gzip(new Buffer(TileDecorator.write(tile)), callback);
