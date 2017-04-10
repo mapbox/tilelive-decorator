@@ -130,7 +130,7 @@ tape('redis config', function(assert) {
             key: 'BoroCode',
             source: testSource,
             redis: 'redis://foo',
-            keepKeys: 'BoroCode'
+            sourceProps: {keep: ['BoroCode']}
         };
         new TileliveDecorator(options, function(err, source) {
             assert.ifError(err);
@@ -154,7 +154,7 @@ tape('setup', function(assert) {
 tape('fail on bad redis data', function(assert) {
     new TestSource(null, function(err, testSource) {
         assert.ifError(err);
-        new TileliveDecorator({key: 'BoroCode', source: testSource, keepKeys: 'BoroCode'}, function(err, source) {
+        new TileliveDecorator({key: 'BoroCode', source: testSource, sourceProps: {keep: 'BoroCode'}}, function(err, source) {
             assert.ifError(err);
             source.getTile(14, 4831, 6159, function(err) {
                 assert.ok(err, 'expected error');
@@ -175,7 +175,7 @@ tape('setup', function(assert) {
     assert.end();
 });
 
-tape('keepKeysRedis', function(assert) {
+tape('redisProps.keep', function(assert) {
     new TestSource(null, function(err, testSource) {
         assert.ifError(err);
         var options = {
@@ -223,7 +223,7 @@ tape('keepKeysRedis', function(assert) {
     });
 });
 
-tape('requiredKeysRedis', function(assert) {
+tape('redisProps.required', function(assert) {
     new TestSource(null, function(err, testSource) {
         assert.ifError(err);
         var options = {
@@ -272,6 +272,87 @@ tape('requiredKeysRedis', function(assert) {
     });
 });
 
+
+tape('outputProps.keep', function(assert) {
+    new TestSource(null, function(err, testSource) {
+        assert.ifError(err);
+        var options = {
+            key: 'NTACode',
+            source: testSource,
+            outputProps: {keep: ['NTACode', 'foo']}
+        };
+        new TileliveDecorator(options, function(err, source) {
+            assert.ifError(err);
+            source.getTile(14, 4831, 6159, function(err, tile) {
+                assert.ifError(err);
+                zlib.gunzip(tile, function(err, buffer) {
+                    assert.ifError(err);
+                    var tile = new VectorTile(new Protobuf(buffer));
+                    var layer = tile.layers.nycneighborhoods;
+                    var qn99, qn60;
+
+                    for (var i = 0; i < layer.length; i++) {
+                        var ft = layer.feature(i);
+                        if (ft.properties.NTACode === 'QN99') qn99 = ft;
+                        if (ft.properties.NTACode === 'QN60') qn60 = ft;
+                    }
+
+                    assert.deepEqual(qn60.properties, {
+                        NTACode: 'QN60',
+                        foo: 4
+                    });
+
+                    assert.deepEqual(qn99.properties, {
+                        NTACode: 'QN99',
+                        foo: 3
+                    });
+
+                    source.client.unref();
+                    assert.end();
+                });
+            });
+        });
+    });
+});
+
+
+tape('outputProps.required', function(assert) {
+    new TestSource(null, function(err, testSource) {
+        assert.ifError(err);
+        var options = {
+            key: 'NTACode',
+            source: testSource,
+            outputProps: {keep: ['NTACode', 'foo'], required: 'qux'}
+        };
+        new TileliveDecorator(options, function(err, source) {
+            assert.ifError(err);
+            source.getTile(14, 4831, 6159, function(err, tile) {
+                assert.ifError(err);
+                zlib.gunzip(tile, function(err, buffer) {
+                    assert.ifError(err);
+                    var tile = new VectorTile(new Protobuf(buffer));
+                    var layer = tile.layers.nycneighborhoods;
+                    var qn99, qn60;
+
+                    for (var i = 0; i < layer.length; i++) {
+                        var ft = layer.feature(i);
+                        if (ft.properties.NTACode === 'QN99') qn99 = ft;
+                        if (ft.properties.NTACode === 'QN60') qn60 = ft;
+                    }
+
+                    assert.deepEqual(qn60.properties, {
+                        NTACode: 'QN60',
+                        foo: 4
+                    }, 'QN60 isn\'t filtered out - it has required output property qux');
+                    assert.notOk(qn99, 'QN99 is filtered out - it doesn\'t have required output property qux');
+
+                    source.client.unref();
+                    assert.end();
+                });
+            });
+        });
+    });
+});
 var cache = new LRU({max: 1000});
 
 tape('lru setup', function(assert) {
