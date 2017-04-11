@@ -9,7 +9,7 @@ tilelive-s3 it can load tiles from s3, and add properties to features from redis
 
 #### with tilelive
 
-Tilelive decorator registers several tilelive protocols: 
+Tilelive decorator registers several tilelive protocols:
 
 - `decorator+s3:` for reading tiles from S3
 - `decorator+mbtiles:` for reading tiles from an mbtiles
@@ -22,7 +22,7 @@ var TileliveS3 = require('tilelive-s3');
 TileliveDecorator.registerProtocols(tilelive);
 TileliveS3.registerProtocols(tilelive);
 
-tilelive.load('decorator+s3://test/{z}/{x}/{y}?key=id&keepKeys=id,name&redis=redis://localhost:6379', function(err, source) {
+tilelive.load('decorator+s3://test/{z}/{x}/{y}?key=id&sourceProps={"keep":["id","name"]}&redis=redis://localhost:6379', function(err, source) {
   // source.getTile(z, x, y, callback);
 });
 ```
@@ -34,9 +34,9 @@ tilelive.load('decorator+s3://test/{z}/{x}/{y}?key=id&keepKeys=id,name&redis=red
 ```js
 var TileliveDecorator = require('tilelive-decorator');
 
-var uri = 'decorator+s3://test/{z}/{x}/{y}?key=id&keepKeys=id,name&redis=redis://localhost:6379'
+var uri = 'decorator+s3://test/{z}/{x}/{y}?key=id&sourceProps={"keep":["id","name"]}&redis=redis://localhost:6379'
 new TileliveDecorator(uri, function (err, source) {
-  // source.getTile(z, x, y, callback); 
+  // source.getTile(z, x, y, callback);
 });
 ```
 
@@ -46,18 +46,15 @@ new TileliveDecorator(uri, function (err, source) {
 
 **key** (required) - specifies what property in the source tiles will be matched to keys in redis.
 
-**keepKeys** (required) - a comma separated list of columns to be copied from source tiles to decorated tiles.
+**sourceProps** - a json object, specifying properties to `keep` from the source tile, and properties that are `required` to exist on features in the source tile. example: `{"keep": ["id", "class"], "required": ["rating"]}`. If all `required` properties don't exist on a feature, that feature is filtered out.
 
-**keepKeysRedis** - a comma separated list of columns to be copied from redis to decorated tiles. By default, all keys are copied.
+**redisProps** - a json object, specifying properties to `keep` from redis records, and properties that are `required` to exist on redis records. example: `{"keep": ["congestion"], "required": ["speed"]}`. If all `required` properties don't exist on a record, that record is filtered out and no new properties will be applied to features that match the record key.
 
-**requiredKeys** - a comma separated list of columns which must exist on features in the source tiles. If a feature does not have all required keys, that feature is excluded from the decorated tiles.
-
-**requiredKeysRedis** - a comma separated list of columns which must exist in the  redis record for a key. If a key's record does not have all required keys, none of that key's data is merged into the decorated tiles.
+**outputProps** - a json object, specifying properties to `keep` in the output tile after decoration, and properties that are `required` to exist on features in the output tile. example: `{"keep": ["class", "congestion"], "required": ["congestion"]}`. If all `required` properties don't exist on a feature, that feature is filtered out.
 
 **redis** - a redis connection string, e.g. `redis://localhost:6379`.
 
 **hashes** - If `hashes=true` is included, redis keys are treated as hash types as opposed to stringified JSON data in string type keys. In this case `hget` is used instead of the default `get` commands.
-
 
 
 ## development

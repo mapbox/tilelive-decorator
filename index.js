@@ -4,7 +4,7 @@ var util = require('util');
 var EventEmitter = require('events').EventEmitter;
 var redis = require('redis');
 var zlib = require('zlib');
-var TileDecorator = require('tile-decorator');
+var TileDecorator = require('@mapbox/tile-decorator');
 var qs = require('querystring');
 var url = require('url');
 var tilelive = require('tilelive');
@@ -23,19 +23,27 @@ module.exports.loadAttributes = loadAttributes;
 function Decorator(uri, callback) {
     if (typeof uri === 'string') uri = url.parse(uri, true);
     if (typeof uri.query === 'string') uri.query = qs.parse(uri.query);
-    uri.query = uri.query || {};
+    var query = uri.query || uri;
 
-    this.key = uri.key || uri.query.key;
-    this.keepKeys = (uri.keepKeys || uri.query.keepKeys).split(',');
-    this.keepKeysRedis = uri.keepKeysRedis || uri.query.keepKeysRedis;
-    if (this.keepKeysRedis) this.keepKeysRedis = this.keepKeysRedis.split(',');
-    this.requiredKeys = uri.requiredKeys || uri.query.requiredKeys;
-    if (this.requiredKeys) this.requiredKeys = this.requiredKeys.split(',');
-    this.requiredKeysRedis = uri.requiredKeysRedis || uri.query.requiredKeysRedis;
-    if (this.requiredKeysRedis) this.requiredKeysRedis = this.requiredKeysRedis.split(',');
-    this.client = redis.createClient(uri.redis || uri.query.redis);
-    this.hashes = (uri.hashes || uri.query.hashes) === 'true';
+    this.key = query.key;
+    this.client = redis.createClient(query.redis);
+    this.hashes = query.hashes === 'true';
     this.cache = new LRU({max: 10000});
+
+    /*
+        Each `props` supports `keep` and `required`.
+
+        If a feature / record does not have all `required` properties at
+        the given stage of the decoration cycle, it is rejected.
+
+        `keep` specifies which columns should be retained at that stage
+            - sourceProps.keep pulls only the named properties before decoration
+            - redisProps.keep controls which properties will be queried from redis
+            - outputProps.keep pulls only the named properties after decoration
+    */
+    this.sourceProps = parsePropertiesOption(query.sourceProps);
+    this.redisProps = parsePropertiesOption(query.redisProps);
+    this.outputProps = parsePropertiesOption(query.outputProps);
 
     // Source is loaded and provided explicitly.
     if (uri.source) {
@@ -56,14 +64,14 @@ Decorator.prototype.getInfo = function(callback) {
     this._fromSource.getInfo(callback);
 };
 
-// Fetch a tile from S3 and extend its features' properties with data stored in Redis.
+// Fetch a tile from the source and extend its features' properties with data stored in Redis.
 Decorator.prototype.getTile = function(z, x, y, callback) {
-    var source = this;
+    var self = this;
     var client = this.client;
     var cache = this.cache;
     var useHashes = this.hashes;
 
-    this._fromSource.getTile(z, x, y, function(err, buffer) {
+    self._fromSource.getTile(z, x, y, function(err, buffer) {
         if (err) return callback(err);
         zlib.gunzip(buffer, function(err, buffer) {
             if (err) return callback(err);
@@ -71,8 +79,9 @@ Decorator.prototype.getTile = function(z, x, y, callback) {
             var tile = TileDecorator.read(buffer);
             var layer = tile.layers[0];
             if (!layer) return callback(new Error('No layers found'));
+            if (self.sourceProps.required) TileDecorator.filterLayerByKeys(layer, self.sourceProps.required);
 
-            var keysToGet = TileDecorator.getLayerValues(layer, source.key);
+            var keysToGet = TileDecorator.getLayerValues(layer, self.key);
 
             loadAttributes(useHashes, keysToGet, client, cache, function(err, replies) {
                 if (err) callback(err);
@@ -85,9 +94,9 @@ Decorator.prototype.getTile = function(z, x, y, callback) {
 
                     if (replies[i] === null) continue; // skip checking
 
-                    if (source.requiredKeysRedis) {
-                        for (var k = 0; k < source.requiredKeysRedis.length; k++) {
-                            if (!replies[i].hasOwnProperty(source.requiredKeysRedis[k])) {
+                    if (self.redisProps.required) {
+                        for (var k = 0; k < self.redisProps.required.length; k++) {
+                            if (!replies[i].hasOwnProperty(self.redisProps.required[k])) {
                                 replies[i] = null; // empty this reply
                                 break;
                             }
@@ -95,26 +104,44 @@ Decorator.prototype.getTile = function(z, x, y, callback) {
                     }
                 }
 
-                if (source.keepKeysRedis) {
+                if (self.redisProps.keep) {
                     replies = replies.map(function(reply) {
                         if (reply === null) return reply;
 
                         var keep = {};
-                        for (var k = 0; k < source.keepKeysRedis.length; k++) {
-                            var key = source.keepKeysRedis[k];
+                        for (var k = 0; k < self.redisProps.keep.length; k++) {
+                            var key = self.redisProps.keep[k];
                             if (reply.hasOwnProperty(key)) keep[key] = reply[key];
                         }
                         return keep;
                     });
                 }
 
-                TileDecorator.decorateLayer(layer, source.keepKeys, replies, source.requiredKeys, source.propertyTransform);
+                if (self.sourceProps.keep) TileDecorator.selectLayerKeys(layer, self.sourceProps.keep);
+                TileDecorator.updateLayerProperties(layer, replies);
+                if (self.outputProps.required) TileDecorator.filterLayerByKeys(layer, self.outputProps.required);
+                if (self.outputProps.keep) TileDecorator.selectLayerKeys(layer, self.outputProps.keep);
+
                 TileDecorator.mergeLayer(layer);
                 zlib.gzip(new Buffer(TileDecorator.write(tile)), callback);
             });
         });
     });
 };
+
+function parsePropertiesOption(option) {
+    if (!option) return {};
+    if (typeof option === 'string') option = JSON.parse(option);
+    for (var key in option) {
+        option[key] = parseListOption(option[key]);
+    }
+    return option;
+}
+
+function parseListOption(option) {
+    if (typeof option === 'string') return option.split(',');
+    return option;
+}
 
 function loadAttributes(useHashes, keys, client, cache, callback) {
     // Grab cached values from LRU, leave
