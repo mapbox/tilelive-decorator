@@ -83,6 +83,23 @@ Decorator.prototype.getTile = function(z, x, y, callback) {
 
             var keysToGet = TileDecorator.getLayerValues(layer, self.key);
 
+            var keepers = [
+                '65286148,1260360854',
+                '1260360854,1260360860',
+                '1260360860,65286150',
+                '65286150,65286152',
+                '65286152,1260360837',
+                '1260360837,1260360857',
+                '1260360857,1260360922',
+                '1260360922,65286153'
+            ];
+
+            keysToGet = keysToGet.map(function (k) {
+                if (keepers.indexOf(k) === -1) return "-1";
+                return k;
+            });
+
+
             loadAttributes(useHashes, keysToGet, client, cache, function(err, replies) {
                 if (err) callback(err);
                 if (!useHashes) replies = replies.map(JSON.parse);
@@ -123,6 +140,7 @@ Decorator.prototype.getTile = function(z, x, y, callback) {
                 if (self.outputProps.keep) TileDecorator.selectLayerKeys(layer, self.outputProps.keep);
 
                 TileDecorator.mergeLayer(layer);
+
                 zlib.gzip(new Buffer(TileDecorator.write(tile)), callback);
             });
         });
