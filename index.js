@@ -85,11 +85,11 @@ Decorator.prototype.getTile = function(z, x, y, callback) {
                 if (err) callback(err);
 
                 for (var i = 0; i < replies.length; i++) {
+                    if (!replies[i]) continue; // skip checking
+
                     if (typeof replies[i] !== 'object') {
                         return callback(new Error('Invalid attribute data: ' + replies[i]));
                     }
-
-                    if (replies[i] === null) continue; // skip checking
 
                     if (self.redisProps.required) {
                         for (var k = 0; k < self.redisProps.required.length; k++) {
