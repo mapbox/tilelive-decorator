@@ -26,9 +26,9 @@ function Decorator(uri, callback) {
     var query = uri.query || uri;
 
     this.key = query.key;
-    this.client = redis.createClient(query.redis);
-    this.hashes = query.hashes === 'true';
-    this.cache = new LRU({max: 10000});
+    // this.client = redis.createClient(query.redis);
+    // this.hashes = query.hashes === 'true';
+    // this.cache = new LRU({max: 10000});
 
     /*
         Each `props` supports `keep` and `required`.
@@ -67,9 +67,7 @@ Decorator.prototype.getInfo = function(callback) {
 // Fetch a tile from the source and extend its features' properties with data stored in Redis.
 Decorator.prototype.getTile = function(z, x, y, callback) {
     var self = this;
-    var client = this.client;
-    var cache = this.cache;
-    var useHashes = this.hashes;
+    // var client = this.client;
 
     self._fromSource.getTile(z, x, y, function(err, buffer) {
         if (err) return callback(err);
@@ -83,9 +81,8 @@ Decorator.prototype.getTile = function(z, x, y, callback) {
 
             var keysToGet = TileDecorator.getLayerValues(layer, self.key);
 
-            loadAttributes(useHashes, keysToGet, client, cache, function(err, replies) {
+            loadAttributes(keysToGet, self.map, function(err, replies) {
                 if (err) callback(err);
-                if (!useHashes) replies = replies.map(JSON.parse);
 
                 for (var i = 0; i < replies.length; i++) {
                     if (typeof replies[i] !== 'object') {
@@ -143,48 +140,16 @@ function parseListOption(option) {
     return option;
 }
 
-function loadAttributes(useHashes, keys, client, cache, callback) {
-    // Grab cached values from LRU, leave
-    // remaining for retrieval from redis.
-    var replies = [];
-    var loadKeys = [];
-    var loadPos = [];
-    var multi = client.multi();
-
-    for (var i = 0; i < keys.length; i++) {
-        var cached = cache.get(keys[i]);
-
-        if (cached) {
-            replies[i] = cached;
-        } else {
-            if (useHashes) {
-                multi.hgetall(keys[i]);
-            } else {
-                multi.get(keys[i]);
-            }
-            loadKeys.push(keys[i]);
-            loadPos.push(i);
-        }
-    }
-
-    // Nothing left to hit redis for.
-    if (!loadKeys.length) return callback(null, replies, 0);
-
-    multi.exec(function(err, loaded) {
-        if (err) return callback(err);
-
-        // Insert redis-loaded values into the right positions and set in LRU cache.
-        for (var i = 0; i < loaded.length; i++) {
-            replies[loadPos[i]] = loaded[i];
-            cache.set(loadKeys[i], loaded[i]);
-        }
-
-        return callback(null, replies, loaded.length);
+function loadAttributes(keys, map, callback) {
+    var replies = keys.map(function (key) {
+        return map.get(key)
     });
+
+    return callback(null, replies, replies.length)
 }
 
 Decorator.prototype.close = function(callback) {
-    this.client.unref();
+    // this.client.unref();
     callback();
 };
 
