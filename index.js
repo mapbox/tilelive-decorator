@@ -84,7 +84,8 @@ Decorator.prototype.getTile = function(z, x, y, callback) {
             var keysToGet = TileDecorator.getLayerValues(layer, self.key);
 
             loadAttributes(useHashes, keysToGet, client, cache, function(err, replies) {
-                if (err) callback(err);
+                if (err) return callback(err);
+                if (!replies) replies = [];
                 if (!useHashes) replies = replies.map(JSON.parse);
 
                 for (var i = 0; i < replies.length; i++) {
