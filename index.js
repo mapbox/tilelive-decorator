@@ -26,38 +26,45 @@ function Decorator(uri, callback) {
     var query = uri.query || uri;
 
     this.key = query.key;
-    this.client = redis.createClient(query.redis);
     this.hashes = query.hashes === 'true';
     this.cache = new LRU({max: 10000});
-
+    
     /*
-        Each `props` supports `keep` and `required`.
-
-        If a feature / record does not have all `required` properties at
-        the given stage of the decoration cycle, it is rejected.
-
-        `keep` specifies which columns should be retained at that stage
-            - sourceProps.keep pulls only the named properties before decoration
-            - redisProps.keep controls which properties will be queried from redis
-            - outputProps.keep pulls only the named properties after decoration
+    Each `props` supports `keep` and `required`.
+    
+    If a feature / record does not have all `required` properties at
+    the given stage of the decoration cycle, it is rejected.
+    
+    `keep` specifies which columns should be retained at that stage
+    - sourceProps.keep pulls only the named properties before decoration
+    - redisProps.keep controls which properties will be queried from redis
+    - outputProps.keep pulls only the named properties after decoration
     */
     this.sourceProps = parsePropertiesOption(query.sourceProps);
     this.redisProps = parsePropertiesOption(query.redisProps);
     this.outputProps = parsePropertiesOption(query.outputProps);
+    
+    this.client = redis.createClient({ url: query.redis, legacyMode: true });
+    var self = this
 
-    // Source is loaded and provided explicitly.
-    if (uri.source) {
-        this._fromSource = uri.source;
-        callback(null, this);
-    } else {
-        uri.protocol = uri.protocol.replace(/^decorator\+/, '');
-        tilelive.auto(uri);
-        tilelive.load(uri, function(err, fromSource) {
-            if (err) return callback(err);
-            this._fromSource = fromSource;
-            callback(null, this);
-        }.bind(this));
+    function onLoad(err, fromSource) {
+        if (err) return callback(err);
+        self._fromSource = fromSource;
+        callback(null, self);
     }
+    // onLoad.bind(this)
+
+    this.client.connect().then(function() {
+        // Source is loaded and provided explicitly.
+        if (uri.source) {
+            self._fromSource = uri.source;
+            callback(null, self);
+        } else {
+            uri.protocol = uri.protocol.replace(/^decorator\+/, '');
+            tilelive.auto(uri);
+            tilelive.load(uri, onLoad);
+        }
+    })
 }
 
 Decorator.prototype.getInfo = function(callback) {
@@ -97,7 +104,7 @@ Decorator.prototype.getTile = function(z, x, y, callback) {
 
                     if (self.redisProps.required) {
                         for (var k = 0; k < self.redisProps.required.length; k++) {
-                            if (!replies[i].hasOwnProperty(self.redisProps.required[k])) {
+                            if (!Object.prototype.hasOwnProperty.call(replies[i], self.redisProps.required[k])) {
                                 replies[i] = null; // empty this reply
                                 break;
                             }
@@ -112,7 +119,7 @@ Decorator.prototype.getTile = function(z, x, y, callback) {
                         var keep = {};
                         for (var k = 0; k < self.redisProps.keep.length; k++) {
                             var key = self.redisProps.keep[k];
-                            if (reply.hasOwnProperty(key)) keep[key] = reply[key];
+                            if (Object.prototype.hasOwnProperty.call(reply, key)) keep[key] = reply[key];
                         }
                         return keep;
                     });
@@ -124,7 +131,7 @@ Decorator.prototype.getTile = function(z, x, y, callback) {
                 if (self.outputProps.keep) TileDecorator.selectLayerKeys(layer, self.outputProps.keep);
 
                 TileDecorator.mergeLayer(layer);
-                zlib.gzip(new Buffer(TileDecorator.write(tile)), callback);
+                zlib.gzip(Buffer.from(TileDecorator.write(tile)), callback);
             });
         });
     });
@@ -153,15 +160,15 @@ function loadAttributes(useHashes, keys, client, cache, callback) {
     var multi = client.multi();
 
     for (var i = 0; i < keys.length; i++) {
-        var cached = cache.get(keys[i]);
-
+        var key = new String(keys[i])
+        var cached = cache.get(key);
         if (cached) {
             replies[i] = cached;
         } else {
             if (useHashes) {
-                multi.hgetall(keys[i]);
+                multi.hGetAll(key);
             } else {
-                multi.get(keys[i]);
+                multi.get(key);
             }
             loadKeys.push(keys[i]);
             loadPos.push(i);
@@ -179,7 +186,6 @@ function loadAttributes(useHashes, keys, client, cache, callback) {
             replies[loadPos[i]] = loaded[i];
             cache.set(loadKeys[i], loaded[i]);
         }
-
         return callback(null, replies, loaded.length);
     });
 }

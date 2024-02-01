@@ -24,12 +24,14 @@ TestSource.prototype.getTile = function(z, x, y, callback) {
     });
 };
 
-var client = redis.createClient();
 
 tape('setup', function(assert) {
-    client.set('4', JSON.stringify({foo: 3, bar: 'baz'}), redis.print);
-    client.unref();
-    assert.end();
+    var client = redis.createClient();
+    client.connect().then(function(client) {
+        client.set('4', JSON.stringify({foo: 3, bar: 'baz'}), redis.print);
+        client.unref();
+        assert.end();
+    })
 });
 
 tape('load with decorator+s3 uri', function(assert) {
@@ -40,7 +42,7 @@ tape('load with decorator+s3 uri', function(assert) {
             '&redis=redis://localhost:6379', function(err, source) {
         assert.ifError(err);
         assert.equal(source.key, 'BoroCode');
-        assert.equal(source.client.address, 'localhost:6379');
+        assert.equal(source.client.options.url, 'redis://localhost:6379');
         assert.equal(source._fromSource instanceof TileliveS3, true);
         assert.deepEqual(source.sourceProps.required, ['BoroCode']);
         source.client.unref();
@@ -78,42 +80,42 @@ tape('setup source directly', function(assert) {
 
                     assert.deepEqual(decorated.loadGeometry(), [
                         [{x: 1363, y: -128},
-                         {x: 1609, y: 150},
-                         {x: 1821, y: 443},
-                         {x: 1909, y: 598},
-                         {x: 2057, y: 917},
-                         {x: 2188, y: 1241},
-                         {x: 2530, y: 2026},
-                         {x: 2635, y: 2197},
-                         {x: 2743, y: 2432},
-                         {x: 2811, y: 2726},
-                         {x: 2836, y: 2781},
-                         {x: 2894, y: 2849},
-                         {x: 3097, y: 3019},
-                         {x: 3784, y: 3700},
-                         {x: 3731, y: 3796},
-                         {x: 3652, y: 3874},
-                         {x: 3475, y: 3949},
-                         {x: 3554, y: 4002},
-                         {x: 3754, y: 3942},
-                         {x: 4025, y: 3828},
-                         {x: 4224, y: 3759},
-                         {x: 4224, y: 1426},
-                         {x: 4202, y: 1389},
-                         {x: 4110, y: 1300},
-                         {x: 3996, y: 1237},
-                         {x: 3870, y: 1199},
-                         {x: 3784, y: 1159},
-                         {x: 3706, y: 1104},
-                         {x: 3638, y: 1036},
-                         {x: 3585, y: 959},
-                         {x: 3429, y: 632},
-                         {x: 3284, y: 410},
-                         {x: 3174, y: 170},
-                         {x: 3026, y: 14},
-                         {x: 3537, y: -128},
-                         {x: 1363, y: -128}
-                    ]]);
+                            {x: 1609, y: 150},
+                            {x: 1821, y: 443},
+                            {x: 1909, y: 598},
+                            {x: 2057, y: 917},
+                            {x: 2188, y: 1241},
+                            {x: 2530, y: 2026},
+                            {x: 2635, y: 2197},
+                            {x: 2743, y: 2432},
+                            {x: 2811, y: 2726},
+                            {x: 2836, y: 2781},
+                            {x: 2894, y: 2849},
+                            {x: 3097, y: 3019},
+                            {x: 3784, y: 3700},
+                            {x: 3731, y: 3796},
+                            {x: 3652, y: 3874},
+                            {x: 3475, y: 3949},
+                            {x: 3554, y: 4002},
+                            {x: 3754, y: 3942},
+                            {x: 4025, y: 3828},
+                            {x: 4224, y: 3759},
+                            {x: 4224, y: 1426},
+                            {x: 4202, y: 1389},
+                            {x: 4110, y: 1300},
+                            {x: 3996, y: 1237},
+                            {x: 3870, y: 1199},
+                            {x: 3784, y: 1159},
+                            {x: 3706, y: 1104},
+                            {x: 3638, y: 1036},
+                            {x: 3585, y: 959},
+                            {x: 3429, y: 632},
+                            {x: 3284, y: 410},
+                            {x: 3174, y: 170},
+                            {x: 3026, y: 14},
+                            {x: 3537, y: -128},
+                            {x: 1363, y: -128}
+                        ]]);
 
                     source.client.unref();
                     assert.end();
@@ -400,6 +402,7 @@ tape('loadAttributes (cache mixed)', function(assert) {
 });
 
 tape('lru teardown', function(assert) {
+    var client = redis.createClient();
     cache.reset();
     client.del('1', '2', '3', '4', function() {
         client.unref();
@@ -428,10 +431,10 @@ tape('loadAttributes (using hashes)', function(assert) {
 });
 
 tape('lru teardown', function(assert) {
+    var client = redis.createClient();
     cache.reset();
     client.del('1', '2', '3', '4', function() {
         client.unref();
         assert.end();
     });
 });
-
