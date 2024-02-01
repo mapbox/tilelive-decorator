@@ -63,10 +63,8 @@ function Decorator(uri, callback) {
         })
         .catch((error) => {
             console.error(`Unexpected error loading tiles: ${error}`)
-            // this.close()
             return callback(error)
         })
-        // .finally(this.close)
 }
 
 Decorator.prototype.getInfo = function(callback) {
@@ -193,21 +191,13 @@ function loadAttributes(useHashes, keys, client, cache, callback) {
 }
 
 Decorator.prototype.close = function(callback) {
-    // try {
-    //     if (this.client.isOpen) {
-    //         this.client.quit((error, reply) => {
-    //             if (error) throw error
-    //             console.log(`Successfully quit Redis connection with reply: ${reply}`)
-    //         })
-    //     }
-    // } catch (error) {
-    //     console.warn(`Failed to quit Redis gracefully: ${error}`)
-    //     this.client.unref()
-    // } finally {
-    //     return callback();
-    // }
-    this.client.unref()
-    return callback()
+    try {
+        this.client.unref()
+    } catch(error) {
+        console.warn(`Error while dereferencing client: ${error}`)
+    } finally {
+        return callback()
+    }
 };
 
 Decorator.registerProtocols = function(tilelive) {
