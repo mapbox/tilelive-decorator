@@ -28,13 +28,13 @@ function Decorator(uri, callback) {
     this.key = query.key;
     this.hashes = query.hashes === 'true';
     this.cache = new LRU({max: 10000});
-    
+
     /*
     Each `props` supports `keep` and `required`.
-    
+
     If a feature / record does not have all `required` properties at
     the given stage of the decoration cycle, it is rejected.
-    
+
     `keep` specifies which columns should be retained at that stage
     - sourceProps.keep pulls only the named properties before decoration
     - redisProps.keep controls which properties will be queried from redis
