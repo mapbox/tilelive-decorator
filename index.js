@@ -45,26 +45,28 @@ function Decorator(uri, callback) {
     this.outputProps = parsePropertiesOption(query.outputProps);
     
     this.client = redis.createClient({ url: query.redis, legacyMode: true });
-    var self = this
-
-    function onLoad(err, fromSource) {
-        if (err) return callback(err);
-        self._fromSource = fromSource;
-        callback(null, self);
-    }
-    // onLoad.bind(this)
-
-    this.client.connect().then(function() {
-        // Source is loaded and provided explicitly.
-        if (uri.source) {
-            self._fromSource = uri.source;
-            callback(null, self);
-        } else {
-            uri.protocol = uri.protocol.replace(/^decorator\+/, '');
-            tilelive.auto(uri);
-            tilelive.load(uri, onLoad);
-        }
-    })
+    this.client.connect()
+        .then(() => {
+            // Source is loaded and provided explicitly.
+            if (uri.source) {
+                this._fromSource = uri.source;
+                callback(null, this);
+            } else {
+                uri.protocol = uri.protocol.replace(/^decorator\+/, '');
+                tilelive.auto(uri);
+                tilelive.load(uri, (err, fromSource) => {
+                    if (err) return callback(err);
+                    this._fromSource = fromSource;
+                    return callback(null, this);
+                });
+            }
+        })
+        .catch((error) => {
+            console.error(`Unexpected error loading tiles: ${error}`)
+            // this.close()
+            return callback(error)
+        })
+        // .finally(this.close)
 }
 
 Decorator.prototype.getInfo = function(callback) {
@@ -160,7 +162,7 @@ function loadAttributes(useHashes, keys, client, cache, callback) {
     var multi = client.multi();
 
     for (var i = 0; i < keys.length; i++) {
-        var key = new String(keys[i])
+        var key = new String(keys[i]).toString()
         var cached = cache.get(key);
         if (cached) {
             replies[i] = cached;
@@ -191,8 +193,21 @@ function loadAttributes(useHashes, keys, client, cache, callback) {
 }
 
 Decorator.prototype.close = function(callback) {
-    this.client.unref();
-    callback();
+    // try {
+    //     if (this.client.isOpen) {
+    //         this.client.quit((error, reply) => {
+    //             if (error) throw error
+    //             console.log(`Successfully quit Redis connection with reply: ${reply}`)
+    //         })
+    //     }
+    // } catch (error) {
+    //     console.warn(`Failed to quit Redis gracefully: ${error}`)
+    //     this.client.unref()
+    // } finally {
+    //     return callback();
+    // }
+    this.client.unref()
+    return callback()
 };
 
 Decorator.registerProtocols = function(tilelive) {
