@@ -160,15 +160,14 @@ function loadAttributes(useHashes, keys, client, cache, callback) {
     var multi = client.multi();
 
     for (var i = 0; i < keys.length; i++) {
-        var key = new String(keys[i]).toString()
-        var cached = cache.get(key);
+        var cached = cache.get(keys[i]);
         if (cached) {
             replies[i] = cached;
         } else {
             if (useHashes) {
-                multi.hGetAll(key);
+                multi.hGetAll(keys[i]);
             } else {
-                multi.get(key);
+                multi.get(keys[i]);
             }
             loadKeys.push(keys[i]);
             loadPos.push(i);
