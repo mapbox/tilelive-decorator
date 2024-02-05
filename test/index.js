@@ -149,7 +149,9 @@ tape('redis config', function(assert) {
             sourceProps: {keep: ['BoroCode']}
         };
         new TileliveDecorator(options, (error) => {
-            assert.equal(error.errno, -3008);
+            var known_errnos = { 'linux': -3007, 'osx': -3008 }
+            assert.ok(error.errno)
+            assert.ok(Object.values(known_errnos).includes(error.errno))
             assert.equal(error.code, 'ENOTFOUND');
             assert.equal(error.hostname, 'foo');
             assert.end()
