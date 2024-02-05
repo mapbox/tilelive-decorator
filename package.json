@@ -1,6 +1,6 @@
 {
   "name": "tilelive-decorator",
-  "version": "4.0.2",
+  "version": "4.0.2-rc.1",
   "description": "Load vector tiles from another source and decorate them with properties from redis.",
   "main": "index.js",
   "directories": {
