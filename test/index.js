@@ -24,12 +24,29 @@ TestSource.prototype.getTile = function(z, x, y, callback) {
     });
 };
 
-var client = redis.createClient();
+async function doWithClient(assert, onConnect) {
+    var client = redis.createClient({ legacyMode: true });
+    return client.connect()
+        .catch((error) => assert.ifError(error))
+        .then(onConnect)
+        .finally(() => {
+            client.unref()
+            assert.end()
+        })
+}
 
-tape('setup', function(assert) {
-    client.set('4', JSON.stringify({foo: 3, bar: 'baz'}), redis.print);
-    client.unref();
-    assert.end();
+function getCheckAndLogReply(assert) {
+    function assertOkAndLogReply(error, reply) {
+        assert.ifError(error)
+        console.log(reply)
+    }
+    return assertOkAndLogReply
+}
+
+tape('setup', async function(assert) {
+    await doWithClient(assert, (client) => {
+        client.set('4', JSON.stringify({foo: 3, bar: 'baz'}), getCheckAndLogReply(assert))
+    })
 });
 
 tape('load with decorator+s3 uri', function(assert) {
@@ -40,7 +57,7 @@ tape('load with decorator+s3 uri', function(assert) {
             '&redis=redis://localhost:6379', function(err, source) {
         assert.ifError(err);
         assert.equal(source.key, 'BoroCode');
-        assert.equal(source.client.address, 'localhost:6379');
+        assert.equal(source.client.options.url, 'redis://localhost:6379');
         assert.equal(source._fromSource instanceof TileliveS3, true);
         assert.deepEqual(source.sourceProps.required, ['BoroCode']);
         source.client.unref();
@@ -78,45 +95,44 @@ tape('setup source directly', function(assert) {
 
                     assert.deepEqual(decorated.loadGeometry(), [
                         [{x: 1363, y: -128},
-                         {x: 1609, y: 150},
-                         {x: 1821, y: 443},
-                         {x: 1909, y: 598},
-                         {x: 2057, y: 917},
-                         {x: 2188, y: 1241},
-                         {x: 2530, y: 2026},
-                         {x: 2635, y: 2197},
-                         {x: 2743, y: 2432},
-                         {x: 2811, y: 2726},
-                         {x: 2836, y: 2781},
-                         {x: 2894, y: 2849},
-                         {x: 3097, y: 3019},
-                         {x: 3784, y: 3700},
-                         {x: 3731, y: 3796},
-                         {x: 3652, y: 3874},
-                         {x: 3475, y: 3949},
-                         {x: 3554, y: 4002},
-                         {x: 3754, y: 3942},
-                         {x: 4025, y: 3828},
-                         {x: 4224, y: 3759},
-                         {x: 4224, y: 1426},
-                         {x: 4202, y: 1389},
-                         {x: 4110, y: 1300},
-                         {x: 3996, y: 1237},
-                         {x: 3870, y: 1199},
-                         {x: 3784, y: 1159},
-                         {x: 3706, y: 1104},
-                         {x: 3638, y: 1036},
-                         {x: 3585, y: 959},
-                         {x: 3429, y: 632},
-                         {x: 3284, y: 410},
-                         {x: 3174, y: 170},
-                         {x: 3026, y: 14},
-                         {x: 3537, y: -128},
-                         {x: 1363, y: -128}
-                    ]]);
-
-                    source.client.unref();
-                    assert.end();
+                            {x: 1609, y: 150},
+                            {x: 1821, y: 443},
+                            {x: 1909, y: 598},
+                            {x: 2057, y: 917},
+                            {x: 2188, y: 1241},
+                            {x: 2530, y: 2026},
+                            {x: 2635, y: 2197},
+                            {x: 2743, y: 2432},
+                            {x: 2811, y: 2726},
+                            {x: 2836, y: 2781},
+                            {x: 2894, y: 2849},
+                            {x: 3097, y: 3019},
+                            {x: 3784, y: 3700},
+                            {x: 3731, y: 3796},
+                            {x: 3652, y: 3874},
+                            {x: 3475, y: 3949},
+                            {x: 3554, y: 4002},
+                            {x: 3754, y: 3942},
+                            {x: 4025, y: 3828},
+                            {x: 4224, y: 3759},
+                            {x: 4224, y: 1426},
+                            {x: 4202, y: 1389},
+                            {x: 4110, y: 1300},
+                            {x: 3996, y: 1237},
+                            {x: 3870, y: 1199},
+                            {x: 3784, y: 1159},
+                            {x: 3706, y: 1104},
+                            {x: 3638, y: 1036},
+                            {x: 3585, y: 959},
+                            {x: 3429, y: 632},
+                            {x: 3284, y: 410},
+                            {x: 3174, y: 170},
+                            {x: 3026, y: 14},
+                            {x: 3537, y: -128},
+                            {x: 1363, y: -128}
+                        ]]);
+                    
+                    source.close(() => assert.end())
                 });
             });
         });
@@ -132,23 +148,21 @@ tape('redis config', function(assert) {
             redis: 'redis://foo',
             sourceProps: {keep: ['BoroCode']}
         };
-        new TileliveDecorator(options, function(err, source) {
-            assert.ifError(err);
-            source.client.once('error', function(err) {
-                assert.equal(err.message.indexOf('Redis connection to foo:6379 failed - getaddrinfo'), 0);
-                source.client.end();
-                source.client.unref();
-                assert.end();
-            });
+        new TileliveDecorator(options, (error) => {
+            var known_errnos = { 'linux': -3007, 'osx': -3008 }
+            assert.ok(error.errno)
+            assert.ok(Object.values(known_errnos).includes(error.errno))
+            assert.equal(error.code, 'ENOTFOUND');
+            assert.equal(error.hostname, 'foo');
+            assert.end()
         });
     });
 });
 
-tape('setup', function(assert) {
-    client = redis.createClient();
-    client.set('4', '"bad data"', redis.print);
-    client.unref();
-    assert.end();
+tape('setup', async function(assert) {
+    await doWithClient(assert, (client) => {
+        client.set('4', '"bad data"', getCheckAndLogReply(assert))
+    })
 });
 
 tape('fail on bad redis data', function(assert) {
@@ -159,20 +173,18 @@ tape('fail on bad redis data', function(assert) {
             source.getTile(14, 4831, 6159, function(err) {
                 assert.ok(err, 'expected error');
                 assert.equal(err.message, 'Invalid attribute data: bad data', 'expected error message');
-                source.close(function() {
-                    assert.end();
-                });
+                source.close(() => assert.end())
             });
         });
     });
 });
 
-
-tape('setup', function(assert) {
-    client.set('QN99', JSON.stringify({foo: 3, bar: 'baz', baz: 'ignored'}), redis.print);
-    client.set('QN60', JSON.stringify({foo: 4, bar: 'baz', baz: 'ignored', qux: 'required'}), redis.print);
-    client.unref();
-    assert.end();
+tape('setup', async function(assert) {
+    var assertOkAndLogReply = getCheckAndLogReply(assert)
+    await doWithClient(assert, (client) => {
+        client.set('QN99', JSON.stringify({foo: 3, bar: 'baz', baz: 'ignored'}), assertOkAndLogReply);
+        client.set('QN60', JSON.stringify({foo: 4, bar: 'baz', baz: 'ignored', qux: 'required'}), assertOkAndLogReply);
+    })
 });
 
 tape('redisProps.keep', function(assert) {
@@ -215,8 +227,7 @@ tape('redisProps.keep', function(assert) {
                         foo: 3
                     });
 
-                    source.client.unref();
-                    assert.end();
+                    source.close(assert.end)
                 });
             });
         });
@@ -264,14 +275,12 @@ tape('redisProps.required', function(assert) {
                         NTACode: 'QN99'
                     }, 'QN99 isn\'t decorated - it doesn\'t have required key qux');
 
-                    source.client.unref();
-                    assert.end();
+                    source.close(assert.end)
                 });
             });
         });
     });
 });
-
 
 tape('outputProps.keep', function(assert) {
     new TestSource(null, function(err, testSource) {
@@ -307,8 +316,7 @@ tape('outputProps.keep', function(assert) {
                         foo: 3
                     });
 
-                    source.client.unref();
-                    assert.end();
+                    source.close(assert.end)
                 });
             });
         });
@@ -346,92 +354,92 @@ tape('outputProps.required', function(assert) {
                     }, 'QN60 isn\'t filtered out - it has required output property qux');
                     assert.notOk(qn99, 'QN99 is filtered out - it doesn\'t have required output property qux');
 
-                    source.client.unref();
-                    assert.end();
+                    source.close(assert.end)
                 });
             });
         });
     });
 });
+
+tape('lru setup', async function(assert) {
+    await doWithClient(assert, (client) => {
+        client.mset(
+            '1', JSON.stringify({foo: 1}),
+            '2', JSON.stringify({foo: 2}),
+            '3', JSON.stringify({foo: 3}),
+            '4', JSON.stringify({foo: 4}),
+        );
+    })
+});
+    
 var cache = new LRU({max: 1000});
-
-tape('lru setup', function(assert) {
-    client = redis.createClient();
-    client.mset(
-        '1', JSON.stringify({foo: 1}),
-        '2', JSON.stringify({foo: 2}),
-        '3', JSON.stringify({foo: 3}),
-        '4', JSON.stringify({foo: 4}),
-        assert.end
-    );
+tape('loadAttributes (cache miss)', async function(assert) {
+    await doWithClient(assert, (client) => {
+        TileliveDecorator.loadAttributes(false, ['1', '2'], client, cache, function(err, replies, loaded) {
+            assert.ifError(err);
+            assert.deepEqual(replies, ['{"foo":1}', '{"foo":2}'], 'loads');
+            assert.equal(cache.get('1'), '{"foo":1}', 'sets item 1 in cache');
+            assert.equal(cache.get('2'), '{"foo":2}', 'sets item 2 in cache');
+            assert.equal(loaded, 2, '2 items loaded from redis');
+        });
+    })
 });
 
-tape('loadAttributes (cache miss)', function(assert) {
-    TileliveDecorator.loadAttributes(false, ['1', '2'], client, cache, function(err, replies, loaded) {
-        assert.ifError(err);
-        assert.deepEqual(replies, ['{"foo":1}', '{"foo":2}'], 'loads');
-        assert.equal(cache.get('1'), '{"foo":1}', 'sets item 1 in cache');
-        assert.equal(cache.get('2'), '{"foo":2}', 'sets item 2 in cache');
-        assert.equal(loaded, 2, '2 items loaded from redis');
-        assert.end();
-    });
+tape('loadAttributes (cache hit)', async function(assert) {
+    await doWithClient(assert, (client) => {
+        TileliveDecorator.loadAttributes(false, ['1', '2'], client, cache, function(err, replies, loaded) {
+            assert.ifError(err);
+            assert.deepEqual(replies, ['{"foo":1}', '{"foo":2}'], 'loads');
+            assert.equal(loaded, 0, '0 items loaded from redis');
+        });
+    })
 });
 
-tape('loadAttributes (cache hit)', function(assert) {
-    TileliveDecorator.loadAttributes(false, ['1', '2'], client, cache, function(err, replies, loaded) {
-        assert.ifError(err);
-        assert.deepEqual(replies, ['{"foo":1}', '{"foo":2}'], 'loads');
-        assert.equal(loaded, 0, '0 items loaded from redis');
-        assert.end();
-    });
+tape('loadAttributes (cache mixed)', async function(assert) {
+    await doWithClient(assert, (client) => {
+        TileliveDecorator.loadAttributes(false, ['1', '3', '2', '4'], client, cache, function(err, replies, loaded) {
+            assert.ifError(err);
+            assert.deepEqual(replies, ['{"foo":1}', '{"foo":3}', '{"foo":2}', '{"foo":4}'], 'loads');
+            assert.equal(cache.get('1'), '{"foo":1}', 'sets item 1 in cache');
+            assert.equal(cache.get('2'), '{"foo":2}', 'sets item 2 in cache');
+            assert.equal(cache.get('3'), '{"foo":3}', 'sets item 3 in cache');
+            assert.equal(cache.get('4'), '{"foo":4}', 'sets item 4 in cache');
+            assert.equal(loaded, 2, '2 items loaded from redis');
+        });
+    })
 });
 
-tape('loadAttributes (cache mixed)', function(assert) {
-    TileliveDecorator.loadAttributes(false, ['1', '3', '2', '4'], client, cache, function(err, replies, loaded) {
-        assert.ifError(err);
-        assert.deepEqual(replies, ['{"foo":1}', '{"foo":3}', '{"foo":2}', '{"foo":4}'], 'loads');
-        assert.equal(cache.get('1'), '{"foo":1}', 'sets item 1 in cache');
-        assert.equal(cache.get('2'), '{"foo":2}', 'sets item 2 in cache');
-        assert.equal(cache.get('3'), '{"foo":3}', 'sets item 3 in cache');
-        assert.equal(cache.get('4'), '{"foo":4}', 'sets item 4 in cache');
-        assert.equal(loaded, 2, '2 items loaded from redis');
-        assert.end();
-    });
+tape('lru teardown', async function(assert) {
+    await doWithClient(assert, async (client) => {
+        cache.reset();
+        await client.del('1', '2', '3', '4')
+    })
 });
 
-tape('lru teardown', function(assert) {
-    cache.reset();
-    client.del('1', '2', '3', '4', function() {
-        client.unref();
-        assert.end();
-    });
+tape('lru setup', async function(assert) {
+    await doWithClient(assert, async (client) => {
+        var multi = client.multi();
+        multi.hset('1', 'foo', 1);
+        multi.hset('2', 'foo', 2);
+        multi.hset('3', 'foo', 3);
+        multi.hset('4', 'foo', 4);
+        await multi.exec();
+    })
 });
 
-
-tape('lru setup', function(assert) {
-    client = redis.createClient();
-    var multi = client.multi();
-    multi.hset('1', 'foo', 1);
-    multi.hset('2', 'foo', 2);
-    multi.hset('3', 'foo', 3);
-    multi.hset('4', 'foo', 4);
-    multi.exec(assert.end);
+tape('loadAttributes (using hashes)', async function(assert) {
+    await doWithClient(assert, (client) => {
+        TileliveDecorator.loadAttributes(true, ['1', '2'], client, cache, function(err, replies, loaded) {
+            assert.ifError(err);
+            assert.deepEqual(replies, [{foo: '1'}, {foo: '2'}], 'loads');
+            assert.equal(loaded, 2, '2 items loaded from redis');
+        });
+    })
 });
 
-tape('loadAttributes (using hashes)', function(assert) {
-    TileliveDecorator.loadAttributes(true, ['1', '2'], client, cache, function(err, replies, loaded) {
-        assert.ifError(err);
-        assert.deepEqual(replies, [{foo: '1'}, {foo: '2'}], 'loads');
-        assert.equal(loaded, 2, '2 items loaded from redis');
-        assert.end();
-    });
+tape('lru teardown', async function(assert) {
+    await doWithClient(assert, async (client) => {
+        cache.reset();
+        await client.del('1', '2', '3', '4')
+    })
 });
-
-tape('lru teardown', function(assert) {
-    cache.reset();
-    client.del('1', '2', '3', '4', function() {
-        client.unref();
-        assert.end();
-    });
-});
-

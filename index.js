@@ -26,38 +26,45 @@ function Decorator(uri, callback) {
     var query = uri.query || uri;
 
     this.key = query.key;
-    this.client = redis.createClient(query.redis);
     this.hashes = query.hashes === 'true';
     this.cache = new LRU({max: 10000});
 
     /*
-        Each `props` supports `keep` and `required`.
+    Each `props` supports `keep` and `required`.
 
-        If a feature / record does not have all `required` properties at
-        the given stage of the decoration cycle, it is rejected.
+    If a feature / record does not have all `required` properties at
+    the given stage of the decoration cycle, it is rejected.
 
-        `keep` specifies which columns should be retained at that stage
-            - sourceProps.keep pulls only the named properties before decoration
-            - redisProps.keep controls which properties will be queried from redis
-            - outputProps.keep pulls only the named properties after decoration
+    `keep` specifies which columns should be retained at that stage
+    - sourceProps.keep pulls only the named properties before decoration
+    - redisProps.keep controls which properties will be queried from redis
+    - outputProps.keep pulls only the named properties after decoration
     */
     this.sourceProps = parsePropertiesOption(query.sourceProps);
     this.redisProps = parsePropertiesOption(query.redisProps);
     this.outputProps = parsePropertiesOption(query.outputProps);
-
-    // Source is loaded and provided explicitly.
-    if (uri.source) {
-        this._fromSource = uri.source;
-        callback(null, this);
-    } else {
-        uri.protocol = uri.protocol.replace(/^decorator\+/, '');
-        tilelive.auto(uri);
-        tilelive.load(uri, function(err, fromSource) {
-            if (err) return callback(err);
-            this._fromSource = fromSource;
-            callback(null, this);
-        }.bind(this));
-    }
+    
+    this.client = redis.createClient({ url: query.redis, legacyMode: true });
+    this.client.connect()
+        .then(() => {
+            // Source is loaded and provided explicitly.
+            if (uri.source) {
+                this._fromSource = uri.source;
+                callback(null, this);
+            } else {
+                uri.protocol = uri.protocol.replace(/^decorator\+/, '');
+                tilelive.auto(uri);
+                tilelive.load(uri, (err, fromSource) => {
+                    if (err) return callback(err);
+                    this._fromSource = fromSource;
+                    return callback(null, this);
+                });
+            }
+        })
+        .catch((error) => {
+            console.error(`Unexpected error loading tiles: ${error}`)
+            return callback(error)
+        })
 }
 
 Decorator.prototype.getInfo = function(callback) {
@@ -97,7 +104,7 @@ Decorator.prototype.getTile = function(z, x, y, callback) {
 
                     if (self.redisProps.required) {
                         for (var k = 0; k < self.redisProps.required.length; k++) {
-                            if (!replies[i].hasOwnProperty(self.redisProps.required[k])) {
+                            if (!Object.prototype.hasOwnProperty.call(replies[i], self.redisProps.required[k])) {
                                 replies[i] = null; // empty this reply
                                 break;
                             }
@@ -112,7 +119,7 @@ Decorator.prototype.getTile = function(z, x, y, callback) {
                         var keep = {};
                         for (var k = 0; k < self.redisProps.keep.length; k++) {
                             var key = self.redisProps.keep[k];
-                            if (reply.hasOwnProperty(key)) keep[key] = reply[key];
+                            if (Object.prototype.hasOwnProperty.call(reply, key)) keep[key] = reply[key];
                         }
                         return keep;
                     });
@@ -124,7 +131,7 @@ Decorator.prototype.getTile = function(z, x, y, callback) {
                 if (self.outputProps.keep) TileDecorator.selectLayerKeys(layer, self.outputProps.keep);
 
                 TileDecorator.mergeLayer(layer);
-                zlib.gzip(new Buffer(TileDecorator.write(tile)), callback);
+                zlib.gzip(Buffer.from(TileDecorator.write(tile)), callback);
             });
         });
     });
@@ -154,12 +161,11 @@ function loadAttributes(useHashes, keys, client, cache, callback) {
 
     for (var i = 0; i < keys.length; i++) {
         var cached = cache.get(keys[i]);
-
         if (cached) {
             replies[i] = cached;
         } else {
             if (useHashes) {
-                multi.hgetall(keys[i]);
+                multi.hGetAll(keys[i]);
             } else {
                 multi.get(keys[i]);
             }
@@ -179,14 +185,18 @@ function loadAttributes(useHashes, keys, client, cache, callback) {
             replies[loadPos[i]] = loaded[i];
             cache.set(loadKeys[i], loaded[i]);
         }
-
         return callback(null, replies, loaded.length);
     });
 }
 
 Decorator.prototype.close = function(callback) {
-    this.client.unref();
-    callback();
+    try {
+        this.client.unref()
+    } catch(error) {
+        console.warn(`Error while dereferencing client: ${error}`)
+    } finally {
+        return callback()
+    }
 };
 
 Decorator.registerProtocols = function(tilelive) {
