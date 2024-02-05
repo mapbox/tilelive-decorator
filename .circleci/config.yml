@@ -4,7 +4,7 @@ jobs:
     test:
         docker:
             - image: cimg/node:18.17.1
-            - image: redis:6
+            - image: redis:7
         steps:
             - checkout
             - run:
