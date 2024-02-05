@@ -4,18 +4,29 @@ jobs:
     test:
         docker:
             - image: cimg/node:18.17.1
+            - image: redis:6
         steps:
             - checkout
             - run:
                 name: Runs `npm install`
                 command: npm install
             - run:
+                name: Wait for Redis
+                command: |
+                    ts_start=$(date +%s)
+                    while ! nc -z localhost 6379; do
+                        sleep 1
+                        if [ $(date +%s) -ge $(($ts_start + 10)) ]; then
+                            echo "Timed out waiting for Redis."
+                            exit 1
+                        fi
+                    done
+            - run:
                 name: Runs `npm test`
                 command: npm test
-                        
+
 workflows:
     version: 2
     build:
         jobs:
             - test
-            
